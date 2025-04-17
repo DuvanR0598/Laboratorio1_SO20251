@@ -4,6 +4,8 @@
 #include <sys/types.h>
 
 #define MAX_PROCESS_NAME 256  //Tamaño maximo para el nombre del proceso
+#define MAX_PIDS 20  // Máximo número de PIDs que podemos procesar para evitar desbordamiento
+#define MAX_FILENAME 256
 
 //Estructura que almacena toda la informacion requerida de un proceso
 struct process_info {
@@ -32,5 +34,13 @@ int get_process_info(pid_t pid, struct process_info *info);
  * @param info Estructura con la información del proceso
  */
 void print_process_info(const struct process_info *info);
+
+/**
+ * Función para generación de reportes en un archivo
+ *  @param info_list Array de estructuras con datos de procesos
+ * @param count Numero de procesos en el array
+ * @param filename nombre del archivo a crear
+ * */
+void generate_report(const struct process_info *info_list, int count, const char *filename);
 
 #endif // PROCESS_INFO_H
