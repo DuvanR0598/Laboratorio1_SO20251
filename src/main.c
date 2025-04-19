@@ -4,8 +4,6 @@
 #include <string.h>
 #include <ctype.h>
 
-//#define MAX_PIDS 20  // Máximo número de PIDs que podemos procesar para evitar desbordamiento
-
 int main(int argc, char *argv[]) {
     //Validacion de argumentos 
     if (argc < 2) {
@@ -14,10 +12,9 @@ int main(int argc, char *argv[]) {
         return ERR_INVALID_ARGS;
     }
 
+    // Inicializar variables
     int use_list_mode = 0;    // Flag para detectar si usamos el modo -l
     int use_report_mode = 0;  //Flag para detectar opcion -r
-    int pid_count = 0;        // Contador de PIDs proporcionados
-    pid_t pids[MAX_PIDS];     // Array para almacenar PIDs a procesar 
     psinfo_error_t global_error = PSINFO_OK;
 
     // Procesar argumentos
@@ -39,8 +36,15 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    //Validar y recolectar PIDs
-    for (int i = (use_list_mode || use_report_mode) ? 2 : 1; i < argc && pid_count < MAX_PIDS; i++) {
+    // Crear lista dinámica
+    struct process_list *processes = create_process_list();
+    if (!processes) {
+        fprintf(stderr, "Error: No se pudo asignar memoria\n");
+        return ERR_MEMORY;
+    }
+
+    //Validar y recolectar PIDs validos
+    for (int i = (use_list_mode || use_report_mode) ? 2 : 1; i < argc; i++) {
         // Verificar que el argumento sea numérico
         for (char *p = argv[i]; *p != '\0'; p++) {
             if (!isdigit(*p)) {
@@ -56,32 +60,25 @@ int main(int argc, char *argv[]) {
             global_error = ERR_INVALID_PID;
             continue;
         }
-        
-        pids[pid_count++] = pid;
-    }
 
-    if (pid_count == 0) {
-        fprintf(stderr, "Error: No se proporcionaron PIDs válidos\n");
-        return ERR_NO_PIDS;
-    }
-
-    struct process_info info_list[MAX_PIDS];  // Almacenar info de todos los procesos
-    int success_count = 0;                    // Para llevar el registro de PIDs procesados correctamente 
-
-    // Obtener información para cada PID
-    for (int i = 0; i < pid_count; i++) {
-        psinfo_error_t error = get_process_info(pids[i], &info_list[success_count]);
+        // Obtener información para cada PID
+        struct process_info info;
+        psinfo_error_t error = get_process_info(pid, &info);
         if (error != PSINFO_OK) {
-            fprintf(stderr, "Error al procesar PID %d: %s\n", 
-                    pids[i], error_to_string(error));
+            fprintf(stderr, "Error al procesar PID %d: %s\n", pid, error_to_string(error));
             global_error = error;
         } else {
-            success_count++;
+            if (add_to_process_list(processes, &info) != PSINFO_OK) {
+                fprintf(stderr, "Error: No hay memoria para almacenar más procesos\n");
+                global_error = ERR_MEMORY;
+                break;
+            }
         }
     }
 
-    if (success_count == 0) {
+    if (processes->count == 0) {
         fprintf(stderr, "Error: No se pudo obtener información de ningún proceso\n");
+        free_process_list(processes);
         return global_error ? global_error : ERR_PROCESS_INFO;
     }
 
@@ -90,29 +87,28 @@ int main(int argc, char *argv[]) {
         char filename[MAX_FILENAME] = "psinfo-report";   // filname: Buffer para contruir el nombre del archivo
         
         // Construir nombre de archivo con los PIDs
-        for (int i = 0; i < success_count; i++) {
-            char pid_str[10];
-            sprintf(pid_str, "-%d", info_list[i].pid);
+        for (size_t i = 0; i < processes->count && strlen(filename) < MAX_FILENAME - 10; i++) {
+            char pid_str[16];  // Buffer para PID
+            snprintf(pid_str, sizeof(pid_str), "-%d", processes->processes[i].pid);
             strncat(filename, pid_str, MAX_FILENAME - strlen(filename) - 1);
         }
         strncat(filename, ".info", MAX_FILENAME - strlen(filename) - 1);
 
-        generate_report(info_list, success_count, filename);
+        generate_report(processes, filename); // Generar el reporte
         printf("Archivo de salida generado: %s\n", filename);
     }
-
-    // Mostrar en pantalla si no es modo reporte o si es modo lista
-    else if (!use_report_mode) {
-        if (use_list_mode) {
-            printf("\n-- Información recolectada!!!\n");
-            for (int i = 0; i < success_count; i++) {
-                printf("\nPid: %d\n", info_list[i].pid);
-                print_process_info(&info_list[i]);
-            }
-        } else if (success_count > 0) {
-            print_process_info(&info_list[0]);
+    else if (use_list_mode) {
+        printf("\n-- Información de procesos recolectada!!!\n");
+        for (size_t i = 0; i < processes->count; i++) {
+            printf("\nPid: %d\n", processes->processes[i].pid);
+            print_process_info(&processes->processes[i]);
         }
+    } else {
+        printf("\n-- Información del proceso recolectada!!!\n");
+        print_process_info(&processes->processes[0]);
     }
 
-    return success_count == pid_count ? PSINFO_OK : global_error;
+    // Liberar recursos
+    free_process_list(processes);
+    return global_error == PSINFO_OK ? 0 : global_error;
 }

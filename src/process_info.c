@@ -3,8 +3,8 @@
 #include <stdlib.h>   // Para sscanf
 #include <string.h>   // Para strncmp
 #include <ctype.h>
-#include <time.h>
 #include <errno.h>
+#include <unistd.h>  // Para pid_t
 
 // Mapeo de códigos de error a mensajes
 static const char *error_messages[] = {
@@ -25,7 +25,7 @@ const char *error_to_string(psinfo_error_t error) {
 }
 
 void print_usage(const char *program_name) {
-    fprintf(stderr, "Uso correcto:\n");
+    fprintf(stderr, "\nUso correcto:\n");
     fprintf(stderr, "  %s <PID>                       # Muestra información de un proceso\n", program_name);
     fprintf(stderr, "  %s -l <PID1> <PID2> ...       # Muestra información de múltiples procesos\n", program_name);
     fprintf(stderr, "  %s -r <PID1> <PID2> ...       # Genera reporte en archivo\n", program_name);
@@ -33,6 +33,46 @@ void print_usage(const char *program_name) {
     fprintf(stderr, "  %s 1234\n", program_name);
     fprintf(stderr, "  %s -l 1234 5678\n", program_name);
     fprintf(stderr, "  %s -r 1234 5678\n", program_name);
+}
+
+// Crea una nueva lista de procesos
+struct process_list *create_process_list(void) {
+    struct process_list *list = malloc(sizeof(struct process_list));
+    if (!list) return NULL;
+    
+    list->processes = malloc(INITIAL_PIDS_CAPACITY * sizeof(struct process_info));
+    if (!list->processes) {
+        free(list);
+        return NULL;
+    }
+    
+    list->count = 0;
+    list->capacity = INITIAL_PIDS_CAPACITY;
+    return list;
+}
+
+// Libera la memoria de la lista
+void free_process_list(struct process_list *list) {
+    if (list) {
+        free(list->processes);
+        free(list);
+    }
+}
+
+// Añade un proceso a la lista (con redimensión automática)
+int add_to_process_list(struct process_list *list, const struct process_info *info) {
+    if (list->count >= list->capacity) {
+        size_t new_capacity = list->capacity * 2;
+        struct process_info *new_processes = realloc(list->processes, new_capacity * sizeof(struct process_info));
+        if (!new_processes) {
+            return ERR_MEMORY;
+        }
+        list->processes = new_processes;
+        list->capacity = new_capacity;
+    }
+    
+    list->processes[list->count++] = *info;
+    return PSINFO_OK;
 }
 
 int get_process_info(pid_t pid, struct process_info *info) {
@@ -83,6 +123,8 @@ int get_process_info(pid_t pid, struct process_info *info) {
     return PSINFO_OK;
 }
 
+/* Muestra la información del proceso en un formato legible
+ Esta función imprime la información del proceso en la consola */
 void print_process_info(const struct process_info *info) {
     printf("Pid: %d\n", info->pid);
     printf("Nombre del proceso: %s\n", info->name);
@@ -95,12 +137,17 @@ void print_process_info(const struct process_info *info) {
            info->voluntary_ctxt_switches, info->nonvoluntary_ctxt_switches);
 }
 
-/* GENERAR UN ARCHIVO DE REPORTE
- * @param info_list Array de estructuras con información de procesos
- * @param count Cantidad de procesos en el array
- * @param filename Nombre del archivo a generar
+/*
+ * GENERAR UN REPORTE EN UN ARCHIVO
+ * 
+ * Esta función genera un archivo de reporte con la información de los procesos
+ * almacenados en la lista. El archivo se crea con el nombre especificado y se
+ * escribe la información de cada proceso en un formato legible.
+ *
+ * @param list Lista de procesos a reportar
+ * @param filename Nombre del archivo a crear
  */
-void generate_report(const struct process_info *info_list, int count, const char *filename) {
+void generate_report(const struct process_list *list, const char *filename)  {
     FILE *report = fopen(filename, "w");
     if (!report) {
         perror("Error al crear archivo de reporte");
@@ -110,20 +157,22 @@ void generate_report(const struct process_info *info_list, int count, const char
     // Escribir la cabecera del reporte
     time_t now = time(NULL);
     fprintf(report, "Reporte generado el: %s\n", ctime(&now));
+    fprintf(report, "Número de procesos: %zu\n\n", list->count);
     fprintf(report, "=================================\n\n");
 
     // Escribir información de cada proceso
-    for (int i = 0; i < count; i++) {
-        fprintf(report, "Pid: %d\n", info_list[i].pid);
-        fprintf(report, "Nombre del proceso: %s\n", info_list[i].name);
-        fprintf(report, "Estado: %c\n", info_list[i].state);
-        fprintf(report, "Tamaño total de memoria: %lu KB\n", info_list[i].vm_size);
-        fprintf(report, "Tamaño TEXT: %lu KB\n", info_list[i].vm_exe);
-        fprintf(report, "Tamaño DATA: %lu KB\n", info_list[i].vm_data);
-        fprintf(report, "Tamaño STACK: %lu KB\n", info_list[i].vm_stk);
-        fprintf(report, "Cambios de contexto (V-NV): %lu - %lu\n\n",
-                info_list[i].voluntary_ctxt_switches,
-                info_list[i].nonvoluntary_ctxt_switches);
+    for (size_t i = 0; i < list->count; i++) {
+        const struct process_info *info = &list->processes[i];
+        fprintf(report, "Pid: %d\n", info->pid);
+        fprintf(report, "Nombre del proceso: %s\n", info->name);
+        fprintf(report, "Estado: %c\n", info->state);
+        fprintf(report, "Tamaño total de memoria: %lu KB\n", info->vm_size);
+        fprintf(report, "Tamaño TEXT: %lu KB\n", info->vm_exe);
+        fprintf(report, "Tamaño DATA: %lu KB\n", info->vm_data);
+        fprintf(report, "Tamaño STACK: %lu KB\n", info->vm_stk);
+        fprintf(report, "Número de cambios de contexto (V-NV): %lu - %lu\n",
+                info->voluntary_ctxt_switches,
+                info->nonvoluntary_ctxt_switches);
     }
 
     fclose(report);
