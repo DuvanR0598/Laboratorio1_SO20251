@@ -4,16 +4,51 @@
 #include <string.h>   // Para strncmp
 #include <ctype.h>
 #include <time.h>
+#include <errno.h>
+
+// Mapeo de códigos de error a mensajes
+static const char *error_messages[] = {
+    "Operación exitosa",
+    "Argumentos inválidos",
+    "No se especificaron PIDs",
+    "PID inválido o inexistente",
+    "Error al acceder a archivos del sistema",
+    "No se pudo obtener información del proceso",
+    "Error de asignación de memoria"
+};
+
+const char *error_to_string(psinfo_error_t error) {
+    if (error >= 0 && error <= ERR_MEMORY) {
+        return error_messages[error];
+    }
+    return "Error desconocido";
+}
+
+void print_usage(const char *program_name) {
+    fprintf(stderr, "Uso correcto:\n");
+    fprintf(stderr, "  %s <PID>                       # Muestra información de un proceso\n", program_name);
+    fprintf(stderr, "  %s -l <PID1> <PID2> ...       # Muestra información de múltiples procesos\n", program_name);
+    fprintf(stderr, "  %s -r <PID1> <PID2> ...       # Genera reporte en archivo\n", program_name);
+    fprintf(stderr, "\nEjemplos:\n");
+    fprintf(stderr, "  %s 1234\n", program_name);
+    fprintf(stderr, "  %s -l 1234 5678\n", program_name);
+    fprintf(stderr, "  %s -r 1234 5678\n", program_name);
+}
 
 int get_process_info(pid_t pid, struct process_info *info) {
     char path[256];
-    sprintf(path, "/proc/%d/status", pid);  // Construye ruta al archivo
+    snprintf(path, sizeof(path), "/proc/%d/status", pid);  // Construye ruta al archivo
     
     FILE *file = fopen(path, "r");  // Abrir el archivo en modo lectura
     if (!file) {
-        return -1;   // Error si no se puede abrir
+        if(errno == ENOENT){
+            return ERR_INVALID_PID;  // El proceso no existe
+        }
+        return ERR_FILE_ACCESS;  // Otro error de acceso
     }
 
+    // Inicializar estructura
+    memset(info, 0, sizeof(struct process_info));
     info->pid = pid;  // Asigna el PID recibido
     char line[256];
     
@@ -39,7 +74,13 @@ int get_process_info(pid_t pid, struct process_info *info) {
     }
     
     fclose(file);  //Cierra el archivo
-    return 0;
+
+    // Validar que se obtuvieron todos los campos necesarios
+    if (info->name[0] == '\0') {
+        return ERR_PROCESS_INFO;
+    }
+    
+    return PSINFO_OK;
 }
 
 void print_process_info(const struct process_info *info) {
