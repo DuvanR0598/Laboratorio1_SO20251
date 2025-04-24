@@ -1,0 +1,30 @@
+Reporte generado el: Mon Apr 21 19:37:44 2025
+
+Número de procesos: 3
+
+=================================
+
+Pid: 662
+Nombre del proceso: sh
+Estado: S
+Tamaño total de memoria: 2892 KB
+Tamaño TEXT: 80 KB
+Tamaño DATA: 232 KB
+Tamaño STACK: 132 KB
+Número de cambios de contexto (V-NV): 2 - 0
+Pid: 675
+Nombre del proceso: node
+Estado: S
+Tamaño total de memoria: 992000 KB
+Tamaño TEXT: 29180 KB
+Tamaño DATA: 49744 KB
+Tamaño STACK: 132 KB
+Número de cambios de contexto (V-NV): 50 - 2
+Pid: 701
+Nombre del proceso: python3
+Estado: S
+Tamaño total de memoria: 44596 KB
+Tamaño TEXT: 2752 KB
+Tamaño DATA: 29232 KB
+Tamaño STACK: 132 KB
+Número de cambios de contexto (V-NV): 9745 - 27

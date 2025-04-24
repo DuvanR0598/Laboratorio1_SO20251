@@ -1,8 +1,8 @@
 #include "process_info.h"
-#include <stdio.h>    // Para fprintf
-#include <stdlib.h>   // Para atoi
-#include <string.h>
-#include <ctype.h>
+#include <stdio.h>    // Para imprimir mensajes de error y salida
+#include <stdlib.h>   // Para funciones como atoi (convertir texto a número)
+#include <string.h>   // Para trabajar con cadenas de texto
+#include <ctype.h>    // Para verificar si un carácter es numérico
 
 int main(int argc, char *argv[]) {
     //Validacion de argumentos 
@@ -13,9 +13,9 @@ int main(int argc, char *argv[]) {
     }
 
     // Inicializar variables
-    int use_list_mode = 0;    // Flag para detectar si usamos el modo -l
-    int use_report_mode = 0;  //Flag para detectar opcion -r
-    psinfo_error_t global_error = PSINFO_OK;
+    int use_list_mode = 0;    // Bandera para detectar si usamos el modo -l
+    int use_report_mode = 0;  // Bandera para detectar opcion -r
+    psinfo_error_t global_error = PSINFO_OK;  // Variable para rastrear errores globales
 
     // Procesar argumentos
     if (argv[1][0] == '-'){
@@ -26,9 +26,10 @@ int main(int argc, char *argv[]) {
         } else {
             fprintf(stderr, "Error: Opción inválida '%s'\n", argv[1]);
             print_usage(argv[0]);
-            return ERR_INVALID_ARGS;
+            return ERR_INVALID_ARGS; 
         }
 
+        // Verificar que haya al menos un PID después de la opción
         if (argc < 3) {
             fprintf(stderr, "Error: Se requiere al menos un PID con la opción %s\n", argv[1]);
             print_usage(argv[0]);
